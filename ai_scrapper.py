@@ -35,7 +35,7 @@ from urllib.request import urlretrieve
 #download selenium
 check_install('selenium')
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException, StaleElementReferenceException
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -45,7 +45,7 @@ from selenium.webdriver import ActionChains
 
 check_install('pygu')
 import pyautogui as pygu
-#login.txt:
+#login.txt: stored in dir surrounding Final_Project
 # linkedin_email = 'my_email'
 # linkedin_pwrd = 'my_password'
 f = open("..\login.txt", 'r')
@@ -122,9 +122,11 @@ class MyDriver(webdriver.Chrome):
       
 #delays should be learned    
     def click_connect_delay(self):
+        return None
         time.sleep(random.random()*5)
   
     def new_search_delay(self):
+        return None
         time.sleep(random.random()*3)
 
     def try_connect(self, search_page = True):
@@ -186,10 +188,41 @@ class MyDriver(webdriver.Chrome):
                     time.sleep(8)
                     pass
 
-    def target_reward_function(self):
+    def target_reward_function(self, prev_invites = 0, prev_pending=0):
         "The True reward function, all locaiton information is encapsulated by webdriver page"
         #pages are no where near standardized in xpath(try CSS?)
-        return 20*int('in' in driver.current_url)
+        # return 20*int('in' in driver.current_url)
+        if prev_invites < self.get_invite_counts():
+            return 20*(self.get_inivte_counts())
+        elif len(self.fxs("/html/body/div[5]/div[4]/div[3]/div/div/div/div/div/section[1]/div[1]/span"))>0:#isSendInvite=true
+            txt = self.fx("/html/body/div[5]/div[4]/div[3]/div/div/div/div/div/section[1]/div[1]/span").text
+            if re.match(r'Your invitation to [a-zA-Z]+ [a-zA-Z]+ was sent.', txt):
+                return 20
+        elif self.get_may_know_pending() > prev_pending:
+            return 20*(self.get_may_know_pending() - prev_pending)
+        else:
+            return 0
+           
+    def get_invite_counts(self):
+        "Gets the number of 'Invite Sent' on the search results page"
+        if 'https://www.linkedin.com/search/' not in  self.current_url:
+            return 0
+        cnt = 0
+        for i in range(10):
+            xpath = "/html/body/div[5]/div[4]/div[3]/div/div[2]/div/div[2]/div/div/div/div/ul/li[{i}]/div/div/div[3]/div/button"
+            try:
+                cnt += self.fx(x).text == "Invite Sent"
+            except:
+                pass
+        return cnt
+
+    def get_may_know_pending(self):
+        "Get counts of people w/ pending connections"
+        if 'https://www.linkedin.com/mynetwork/' in self.current_url:
+            return sum([i.text=='Pending' for i in self.fxs('//*/span[@class="artdeco-button__text"]')])
+        else:
+            return None
+
         # reward = 0
         # header = driver.fx('//div[@class="profile-background-image profile-background-image--loading ember-view"]/following-sibling::div')
         # try:
@@ -236,46 +269,116 @@ class MyDriver(webdriver.Chrome):
         else:#base case
             return [path]
         
-    def click_profiles(self):
+    def click_profiles(self, url):
         "Explore tree structure of potential profiles"
-        path = '/*'
-        root = self.fxs(path)
-        all_elements = self.fxs("//*")
+        self.get(url)
+        time.sleep(0.3)
+        leaf_elements = list(filter(lambda i: i.text == 'Connect',
+                                    self.fxs("//*[not(*)]"
+                                             )
+                                    )
+                             )
         url = self.current_url
-        wt = WebDriverWait(self, 0.3)
-        for c in all_elements:
-            # try:
-            #     wt.until(EC.element_to_be_clickable(p))
-            # except TimeoutException:
-            #     ActionChains(self).send_keys("u'\ue00c")#escape Key
-            #     try:
-            #         wt.until(EC.element_to_be_clickable(p))
-            #     except TimeoutException:
-            #         print("Falled to escape a bad click")    
+        prev_invites = self.get_invite_counts()
+        prev_pending = self.get_may_know_pending()
+        other_urls = set()
+        cum_reward = 0
+        for c in leaf_elements:#Get reward from connecting on this page; should be learning this
+            try:
+                if 'connect' == c.text.lower():
+                    # print(c.text)
+                #keep track of reward, grib
+                    c.click()
+                    time.sleep(0.1)
+                    reward =  self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending)
+                    if reward != 0:
+                        cum_reward += reward
+                        print("Got Reward: ", reward)
+                    if url != self.current_url:
+                        other_urls.add(self.current_url)
+                        print(self.current_url)
+                        self.back()
+                        leaf_elements[:] = self.fxs("//*[not(*)]")
+                        time.sleep(0.1)
+                    prev_invites = self.get_invite_counts()
+                    prev_pending = self.get_may_know_pending()
+            except Exception as e:# StaleElementReferenceException:
+                print(e, url)
+                # self.get(url)
+                leaf_elements[:] = self.fxs("//*[not(*)]")
+                
+        all_elements = self.fxs("//*")
+        for c in all_elements:#get the next URL pages
             try:
                 if not c.is_displayed():
-                    ActionChains(driver).send_keys("u'\ue00c").perform()#escape Key    
+                    ActionChains(self).send_keys("u'\ue00c").perform()#escape Key    
                     time.sleep(0.1)
                 c.click()
+                time.sleep(0.1)
+                # if self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending) != 0:
+                #     print("Got Reward: ", self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending))
+                #     return self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending), other_urls
                 if url != self.current_url:#want to know click did something
-                    if self.target_reward_function() == 0:
-                        self.back()
-                        #check if c clickable
-                    else:
-                        print("Got Reward: ", self.target_reward_function())
-                        break
+                    print("New Page: ", self.current_url)
+                    other_urls.add(self.current_url)#potential next to add
+                    # if self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending) == 0:
+                    #     self.back()
+                    # else:
+                    #     print("Got Reward: ", self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending))
+                    #     return self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending), other_urls
             except:
                 pass
+            return cum_reward, other_urls
               
+        
+    def click_profile_manager(self):
+        urls = [self.current_url]#starting url
+        urls = ["https://www.linkedin.com/mynetwork/"]
+        # used_urls = set()
+        while True:
+            print(urls)
+            url = urls[0]#issue here
+            if len(urls) > 0:
+                del urls[0]
+            else:
+                print("Repeating website")
+            print("TOP", url)
+            reward, page_urls = self.click_profiles(url)
+            if reward != 0:
+                print(url, "had reward of ", reward, "from ")
+            urls += list(page_urls)
+            # else:
+            #     for url in page_urls:
+            #         print("Sub: ", url)
+            #         reward, urls = self.click_profiles(url)
+            #         if reward != 0:
+            #             url = self.current_url
+            #             break
+            #         else:
+            #             out += urls
+                
 # driver.update()
-# driver.click_profiles()
-
-#%%              
+# driver.click_profiles = MyDriver.click_profiles
+# 
+#%%         
 driver = MyDriver()
-driver.goto_linkedin()
-driver.get('https://www.linkedin.com/in/clark-benham-2068b0152/')
+driver.goto_linkedin()  
+# driver.get('https://www.linkedin.com/in/clark-benham-2068b0152/')
+#%
+driver.click_profile_manager()#will end up on the home page; that gives it some reward.
 #%%
-driver.click_profiles()#will end up on the home page; that gives it some reward.
+
+
+driver = MyDriver()
+driver.goto_linkedin()  
+#%%
+
+
+
+
+
+
+
 
 #%%
 #An attempt at clicking through all availible nodes. Not building the xpath search tree correctly.
