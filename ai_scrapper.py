@@ -269,7 +269,7 @@ class MyDriver(webdriver.Chrome):
         else:#base case
             return [path]
         
-    def click_profiles(self, url, connect_xpath = "//*[not(*)]"):
+    def click_profiles(self, url, connect_xpath = "//*[not(*)]", target_text = 'Connect'):
         "Explore tree structure of potential profiles"
         print("new", random.randint(0,1))
         self.get(url)
@@ -290,7 +290,7 @@ class MyDriver(webdriver.Chrome):
         for c in leaf_elements:#Get reward from connecting on this page; should be learning this
             try:
                 print(c.text)
-                if 'Connect' == c.text:
+                if target_text == c.text:
                     print(c.text)
                 #keep track of reward, grib
                     c.click()
@@ -326,6 +326,7 @@ class MyDriver(webdriver.Chrome):
         print("index")
         ix = 0
         all_elements = self.fxs("//*")
+        driver.execute_script("window.scrollBy(0,500)")#scroll down
         for c in all_elements:#get the next URL pages
             try:
                 if not c.is_displayed():
@@ -356,24 +357,40 @@ class MyDriver(webdriver.Chrome):
             return cum_reward, other_urls
         
     def click_profile_manager(self):
-        urls = ["https://www.linkedin.com/mynetwork/"]
+        # urls = ["https://www.linkedin.com/mynetwork/"]
         # inpt = self.fx('//input[@aria-label="Search"]')
         # inpt.clear()
         # inpt.send_keys(f"jake"u'\ue007')
         # time.sleep(1)
-        # urls = [self.current_url]#starting url
+        urls = [self.current_url]#starting url
+        url_value = {}
         while True:
             print(urls)
             url = urls[0]#issue here
-            if len(urls) > 1:
-                del urls[0]
+            if len(urls) == 1:
+                break
             else:
                 print("Repeating website")
             print("TOP", url)
+            start = time.time()
+            reward, page_urls = self.click_profiles(url)
+            stop = time.time()
+            reward *= 2**((start-stop)/20)
+            if reward != 0:
+                print(url, "had reward of ", reward, "from ")
+                url_value[url] = reward
+            urls += list(page_urls)
+            
+        sorted_urls = sorted(tst.items(), key = lambda i: i[1], reverse = True)
+        while len(sorted_urls) > 0:
+            url = sorted_urls[0]#issue here
+            del sorted_urls[0]
             reward, page_urls = self.click_profiles(url)
             if reward != 0:
                 print(url, "had reward of ", reward, "from ")
-            urls += list(page_urls)
+                url_value[url] = reward
+           
+            
             # else:
             #     for url in page_urls:
             #         print("Sub: ", url)
@@ -405,9 +422,26 @@ driver.click_profile_manager()#will end up on the home page; that gives it some 
 driver = MyDriver()
 driver.goto_linkedin()  
 #%%
+connect_xpath = '//*'#'[text()="Connect"]/parent::button'
+leaf_elements = driver.find_elements_by_xpath(connect_xpath)#isn't true; sometimes click parents
 
-
-
+start = time.time()
+for i in leaf_elements:
+    print(i.text)
+stop = time.time()
+print(stop-start)
+#48.56775879859924 for 1559 text elements
+#%%
+url = driver.current_url
+xpaths = ['//*[@id="mynetwork-tab-icon"]','/html/body/header/div/nav/ul/li[3]/a/span[1]']
+start = time.time()
+for x in xpaths*8:
+    driver.wu(x).click()
+    if driver.current_url != url:
+        driver.get(url)
+        driver.wu(x)
+stop = time.time()
+print(stop.start)
 
 
 #%%
