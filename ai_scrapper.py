@@ -273,11 +273,7 @@ class MyDriver(webdriver.Chrome):
         "Explore tree structure of potential profiles"
         self.get(url)
         time.sleep(0.3)
-        leaf_elements = list(filter(lambda i: i.text == 'Connect',
-                                    self.fxs("//*[not(*)]"
-                                             )
-                                    )
-                             )
+        leaf_elements = list(filter(lambda i: i.text == 'Connect', self.fxs("//*[not(*)]")))
         url = self.current_url
         prev_invites = self.get_invite_counts()
         prev_pending = self.get_may_know_pending()
@@ -296,15 +292,15 @@ class MyDriver(webdriver.Chrome):
                         print("Got Reward: ", reward)
                     if url != self.current_url:
                         other_urls.add(self.current_url)
-                        print(self.current_url)
+                        # print(self.current_url)
                         self.back()
                         leaf_elements[:] = self.fxs("//*[not(*)]")
                         time.sleep(0.1)
                     prev_invites = self.get_invite_counts()
                     prev_pending = self.get_may_know_pending()
-            except Exception as e:# StaleElementReferenceException:
-                print(e, url)
-                # self.get(url)
+            except:# StaleElementReferenceException:
+                # print(e, url)
+                self.get(url)
                 leaf_elements[:] = self.fxs("//*[not(*)]")
                 
         all_elements = self.fxs("//*")
@@ -321,13 +317,16 @@ class MyDriver(webdriver.Chrome):
                 if url != self.current_url:#want to know click did something
                     print("New Page: ", self.current_url)
                     other_urls.add(self.current_url)#potential next to add
+                    # self.get(url)
+                    self.back()
+                    time.sleep(0.1)
                     # if self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending) == 0:
                     #     self.back()
                     # else:
                     #     print("Got Reward: ", self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending))
                     #     return self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending), other_urls
             except:
-                pass
+                all_elements[:] = self.fxs("//*")
             return cum_reward, other_urls
               
         
@@ -338,7 +337,7 @@ class MyDriver(webdriver.Chrome):
         while True:
             print(urls)
             url = urls[0]#issue here
-            if len(urls) > 0:
+            if len(urls) > 1:
                 del urls[0]
             else:
                 print("Repeating website")
@@ -365,6 +364,7 @@ driver = MyDriver()
 driver.goto_linkedin()  
 # driver.get('https://www.linkedin.com/in/clark-benham-2068b0152/')
 #%
+time.sleep(1)
 driver.click_profile_manager()#will end up on the home page; that gives it some reward.
 #%%
 
