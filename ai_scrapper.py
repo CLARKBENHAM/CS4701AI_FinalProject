@@ -269,40 +269,62 @@ class MyDriver(webdriver.Chrome):
         else:#base case
             return [path]
         
-    def click_profiles(self, url):
+    def click_profiles(self, url, connect_xpath = "//*[not(*)]"):
         "Explore tree structure of potential profiles"
+        print("new", random.randint(0,1))
         self.get(url)
         time.sleep(0.3)
-        leaf_elements = list(filter(lambda i: i.text == 'Connect', self.fxs("//*[not(*)]")))
         url = self.current_url
+        # suggestions = self.fx('//h2[text()="More suggestions for you"]/ancestor::section')
+        # leaf_elements = list(filter(lambda i: i.text == 'Connect',
+        #                             suggestions.find_elements_by_xpath("//*[not(*)]")))
+        connect_xpath = '//*'#'[text()="Connect"]/parent::button'
+        leaf_elements = self.find_elements_by_xpath(connect_xpath)#isn't true; sometimes click parents
+        # leaf_elements =self.fxs()
+        
         prev_invites = self.get_invite_counts()
         prev_pending = self.get_may_know_pending()
         other_urls = set()
         cum_reward = 0
+        ix = 0
         for c in leaf_elements:#Get reward from connecting on this page; should be learning this
             try:
-                if 'connect' == c.text.lower():
-                    # print(c.text)
+                print(c.text)
+                if 'Connect' == c.text:
+                    print(c.text)
                 #keep track of reward, grib
                     c.click()
+                    ix += 1
                     time.sleep(0.1)
                     reward =  self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending)
                     if reward != 0:
                         cum_reward += reward
                         print("Got Reward: ", reward)
                     if url != self.current_url:
+                        print("diff url", self.current_url)
                         other_urls.add(self.current_url)
-                        # print(self.current_url)
-                        self.back()
-                        leaf_elements[:] = self.fxs("//*[not(*)]")
-                        time.sleep(0.1)
+                        # self.back()
+                        self.get(url)
+                        # suggestions = self.fx('//h2[text()="More suggestions for you"]/ancestor::section')
+                        time.sleep(0.3)
+                        leaf_elements[:] = list(filter(lambda i: i.text == 'Connect', 
+                                                       self.find_elements_by_xpath(connect_xpath))[ix:])
+                        ix = 0
                     prev_invites = self.get_invite_counts()
                     prev_pending = self.get_may_know_pending()
-            except:# StaleElementReferenceException:
+            except Exception as e:# StaleElementReferenceException:
                 # print(e, url)
-                self.get(url)
-                leaf_elements[:] = self.fxs("//*[not(*)]")
-                
+                # self.get(url)
+                # suggestions = self.fx('//h2[text()="More suggestions for you"]/ancestor::section')
+                # leaf_elements[:] = list(filter(lambda i: i.text == 'Connect', 
+                #                                self.find_elements_by_xpath("//*[not(*)]")))
+                print(e)
+                time.sleep(0.3)
+                leaf_elements[:] = self.fxs(connect_xpath)[ix:]
+                ix = 0
+           
+        print("index")
+        ix = 0
         all_elements = self.fxs("//*")
         for c in all_elements:#get the next URL pages
             try:
@@ -310,6 +332,7 @@ class MyDriver(webdriver.Chrome):
                     ActionChains(self).send_keys("u'\ue00c").perform()#escape Key    
                     time.sleep(0.1)
                 c.click()
+                ix += 1
                 time.sleep(0.1)
                 # if self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending) != 0:
                 #     print("Got Reward: ", self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending))
@@ -319,21 +342,26 @@ class MyDriver(webdriver.Chrome):
                     other_urls.add(self.current_url)#potential next to add
                     # self.get(url)
                     self.back()
-                    time.sleep(0.1)
+                    time.sleep(0.3)
+                    all_elements[:] = self.fxs("//*")[ix:]
+                    ix = 0
                     # if self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending) == 0:
                     #     self.back()
                     # else:
                     #     print("Got Reward: ", self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending))
                     #     return self.target_reward_function(prev_invites=prev_invites, prev_pending=prev_pending), other_urls
             except:
-                all_elements[:] = self.fxs("//*")
+                all_elements[:] = self.fxs("//*")[ix:]
+                ix = 0
             return cum_reward, other_urls
-              
         
     def click_profile_manager(self):
-        urls = [self.current_url]#starting url
         urls = ["https://www.linkedin.com/mynetwork/"]
-        # used_urls = set()
+        # inpt = self.fx('//input[@aria-label="Search"]')
+        # inpt.clear()
+        # inpt.send_keys(f"jake"u'\ue007')
+        # time.sleep(1)
+        # urls = [self.current_url]#starting url
         while True:
             print(urls)
             url = urls[0]#issue here
@@ -359,12 +387,17 @@ class MyDriver(webdriver.Chrome):
 # driver.update()
 # driver.click_profiles = MyDriver.click_profiles
 # 
-#%%         
+
+# driver.click_profiles("https://www.linkedin.com/mynetwork/")
+# MyDriver.click_profile_manager(driver)
+driver.click_profile_manager()#will end up on the home page; that gives it some reward.
+
+#%%       
 driver = MyDriver()
 driver.goto_linkedin()  
 # driver.get('https://www.linkedin.com/in/clark-benham-2068b0152/')
 #%
-time.sleep(1)
+# time.sleep(1)
 driver.click_profile_manager()#will end up on the home page; that gives it some reward.
 #%%
 
@@ -372,9 +405,6 @@ driver.click_profile_manager()#will end up on the home page; that gives it some 
 driver = MyDriver()
 driver.goto_linkedin()  
 #%%
-
-
-
 
 
 
